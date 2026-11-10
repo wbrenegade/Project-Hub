@@ -920,7 +920,11 @@ class ProjectMapView(QGraphicsView):
             button.clicked.connect(lambda _checked=False, cb=callback: self._run_context_action(cb))
             layout.addWidget(button)
         panel.adjustSize()
-        point = self.viewport().mapFromGlobal(screen_pos.toPoint())
+        # QContextMenuEvent.globalPos() and QGraphicsSceneContextMenuEvent.screenPos()
+        # are already QPoint in PySide6. Calling toPoint() on them raises
+        # AttributeError, which SafeApp.notify() previously swallowed.
+        global_point = screen_pos.toPoint() if hasattr(screen_pos, 'toPoint') else screen_pos
+        point = self.viewport().mapFromGlobal(global_point)
         area = self.viewport().rect()
         x = min(max(0, point.x()), max(0, area.width() - panel.width()))
         y = min(max(0, point.y()), max(0, area.height() - panel.height()))
