@@ -894,10 +894,14 @@ class ProjectMapView(QGraphicsView):
         if self.itemAt(event.pos()) is not None:
             super().contextMenuEvent(event)
             return
-        menu = QMenu(self)
-        menu.addAction('Add new project...', self.addRequested.emit)
+        # popup() avoids nesting Qt's event loop inside graphics-view event delivery.
+        menu = _QMenu(self)
+        menu.addAction('Add new project', self.addRequested.emit)
         menu.addAction('Scan folder...', self.scanRequested.emit)
-        menu.exec(event.globalPos())
+        self._context_menu = menu
+        menu.aboutToHide.connect(menu.deleteLater)
+        menu.popup(event.globalPos())
+        event.accept()
 
     def drawBackground(self, painter, rect):
         painter.fillRect(rect, QColor(BACKGROUND))

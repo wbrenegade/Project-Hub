@@ -611,12 +611,23 @@ class App(QMainWindow):
         QMessageBox.information(self, 'Remote command result', text[:4000])
 
     def add(self):
-        dialog = ProjectDialog(self)
-        if dialog.exec() == QDialog.Accepted and dialog.result:
-            p = dialog.result
-            self.select_new(p)
-            if p.source_location and Path(p.source_location).is_dir():
-                self.scan_project(p, initial=True, protected=dialog.protected_scan_fields)
+        """Create a draggable project immediately; details can be filled in on the map."""
+        names = {p.name.casefold() for p in self.manager.projects}
+        name = 'New Project'
+        number = 2
+        while name.casefold() in names:
+            name = f'New Project {number}'
+            number += 1
+
+        project = Project(name=name)
+        # Ensure the new node won't be hidden by an existing text filter.
+        if self.search.text():
+            self.search.clear()
+        self.select_new(project)
+        self.views.setCurrentWidget(self.map)
+        self.view_toggle.setText('List view')
+        self.map.select(self.selected_index)
+        self.status.setText(f'Added {name}. Drag it to position it; double-click to edit.')
 
     def add_folder(self):
         path = QFileDialog.getExistingDirectory(self, 'Choose project root folder')
