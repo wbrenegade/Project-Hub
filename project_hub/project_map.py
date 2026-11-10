@@ -13,7 +13,7 @@ import uuid
 from PySide6.QtCore import QLineF, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QFontMetricsF, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (QComboBox, QGraphicsItem, QGraphicsLineItem, QGraphicsProxyWidget, QGraphicsScene,
-                               QGraphicsView, QLineEdit, QMenu as _QMenu)
+                               QGraphicsView, QLineEdit, QMenu as _QMenu, QFrame, QVBoxLayout, QPushButton)
 
 class QMenu(_QMenu):
     def exec(self, *args, **kwargs):
@@ -826,6 +826,29 @@ class ProjectMapView(QGraphicsView):
         self.active_editor = None
         self.reopen = None
         self._overlap_pending = False
+        # Ordinary child widgets, not a native QMenu popup, to avoid the Windows
+        # access violation observed in QMenu.exec() when right-clicking the map.
+        self._context_panel = QFrame(self.viewport())
+        self._context_panel.setObjectName('mapContextPanel')
+        self._context_panel.setStyleSheet(
+            'QFrame#mapContextPanel { background: #182536; border: 1px solid #52657a; border-radius: 5px; }'
+            'QPushButton { text-align: left; padding: 7px 12px; color: white; border: none; }'
+            'QPushButton:hover { background: #29445e; }'
+        )
+        panel_layout = QVBoxLayout(self._context_panel)
+        panel_layout.setContentsMargins(4, 4, 4, 4)
+        panel_layout.setSpacing(2)
+        add_button = QPushButton('Add new project', self._context_panel)
+        scan_button = QPushButton('Scan folder...', self._context_panel)
+        panel_layout.addWidget(add_button)
+        panel_layout.addWidget(scan_button)
+        add_button.clicked.connect(self._context_panel.hide)
+        add_button.clicked.connect(self.addRequested.emit)
+        scan_button.clicked.connect(self._context_panel.hide)
+        scan_button.clicked.connect(self.scanRequested.emit)
+        self._context_panel.setFixedWidth(185)
+        self._context_panel.adjustSize()
+        self._context_panel.hide()
         for item in loose or ():
             self.add_loose(item['path'], QPointF(item.get('x', 0), item.get('y', 0)), item.get('id'))
 
@@ -892,16 +915,23 @@ class ProjectMapView(QGraphicsView):
 
     def contextMenuEvent(self, event):
         if self.itemAt(event.pos()) is not None:
+            self._context_panel.hide()
             super().contextMenuEvent(event)
             return
-        # popup() avoids nesting Qt's event loop inside graphics-view event delivery.
-        menu = _QMenu(self)
-        menu.addAction('Add new project', self.addRequested.emit)
-        menu.addAction('Scan folder...', self.scanRequested.emit)
-        self._context_menu = menu
-        menu.aboutToHide.connect(menu.deleteLater)
-        menu.popup(event.globalPos())
+        panel = self._context_panel
+        panel.adjustSize()
+        area = self.viewport().rect()
+        x = min(max(0, event.pos().x()), max(0, area.width() - panel.width()))
+        y = min(max(0, event.pos().y()), max(0, area.height() - panel.height()))
+        panel.move(x, y)
+        panel.raise_()
+        panel.show()
         event.accept()
+
+    def mousePressEvent(self, event):
+        if event.button() != Qt.RightButton:
+            self._context_panel.hide()
+        super().mousePressEvent(event)
 
     def drawBackground(self, painter, rect):
         painter.fillRect(rect, QColor(BACKGROUND))
