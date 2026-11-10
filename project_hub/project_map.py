@@ -310,15 +310,16 @@ class MapNode(QGraphicsItem):
         if not path:
             event.ignore()
             return
-        menu = QMenu()
-        menu.addAction('Open in editor', lambda: self.view.openInEditor.emit(path))
-        menu.addAction('Git...', lambda: self.view.gitRequested.emit(path))
+        actions = [
+            ('Open in editor', lambda: self.view.openInEditor.emit(path)),
+            ('Git...', lambda: self.view.gitRequested.emit(path)),
+        ]
         if self.edit and self.edit[1] != BOOL:
-            menu.addAction('Edit value', self.start_edit)
+            actions.append(('Edit value', self.start_edit))
         if self.link_path:
             index = self.view.index_of(self)
-            menu.addAction('Remove from project', lambda: self.view.unlinkRequested.emit(index, path))
-        menu.exec(event.screenPos())
+            actions.append(('Remove from project', lambda: self.view.unlinkRequested.emit(index, path)))
+        self.view.show_context_actions(event.screenPos(), actions)
         event.accept()
     def itemChange(self, change, value):
         if change == QGraphicsItem.ItemPositionHasChanged:
@@ -468,12 +469,10 @@ class ProjectNode(MapNode):
     def contextMenuEvent(self, event):
         project_id = self.project.id
         view = self.view
-        menu = QMenu(view)
-        delete = menu.addAction('Delete project...')
-        selected = menu.exec(event.screenPos())
+        view.show_context_actions(event.screenPos(), [
+            ('Delete project...', lambda: view.deleteRequested.emit(project_id)),
+        ])
         event.accept()
-        if selected == delete:
-            QTimer.singleShot(0, lambda: view.deleteRequested.emit(project_id))
 
     def setup_shape(self):
         self.font = QFont('Arial', 11, QFont.Bold)
@@ -628,11 +627,12 @@ class LooseNode(QGraphicsItem):
         self.view.openInEditor.emit(self.path)
 
     def contextMenuEvent(self, event):
-        menu = QMenu()
-        menu.addAction('Open in editor', lambda: self.view.openInEditor.emit(self.path))
-        menu.addAction('Git...', lambda: self.view.gitRequested.emit(self.path))
-        menu.addAction('Remove', lambda: self.view.remove_loose(self))
-        menu.exec(event.screenPos())
+        path = self.path
+        self.view.show_context_actions(event.screenPos(), [
+            ('Open in editor', lambda: self.view.openInEditor.emit(path)),
+            ('Git...', lambda: self.view.gitRequested.emit(path)),
+            ('Remove', lambda: self.view.remove_loose(self)),
+        ])
         event.accept()
 
 
@@ -838,16 +838,8 @@ class ProjectMapView(QGraphicsView):
         panel_layout = QVBoxLayout(self._context_panel)
         panel_layout.setContentsMargins(4, 4, 4, 4)
         panel_layout.setSpacing(2)
-        add_button = QPushButton('Add new project', self._context_panel)
-        scan_button = QPushButton('Scan folder...', self._context_panel)
-        panel_layout.addWidget(add_button)
-        panel_layout.addWidget(scan_button)
-        add_button.clicked.connect(self._context_panel.hide)
-        add_button.clicked.connect(self.addRequested.emit)
-        scan_button.clicked.connect(self._context_panel.hide)
-        scan_button.clicked.connect(self.scanRequested.emit)
+        self._context_panel_layout = panel_layout
         self._context_panel.setFixedWidth(185)
-        self._context_panel.adjustSize()
         self._context_panel.hide()
         for item in loose or ():
             self.add_loose(item['path'], QPointF(item.get('x', 0), item.get('y', 0)), item.get('id'))
@@ -913,19 +905,44 @@ class ProjectMapView(QGraphicsView):
         if self.save_positions:
             self.save_positions(self.positions)
 
+    def show_context_actions(self, screen_pos, actions):
+        """Show an in-viewport context panel, never a native Qt popup menu."""
+        panel = self._context_panel
+        panel.hide()
+        layout = self._context_panel_layout
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        for label, callback in actions:
+            button = QPushButton(label, panel)
+            button.clicked.connect(lambda _checked=False, cb=callback: self._run_context_action(cb))
+            layout.addWidget(button)
+        panel.adjustSize()
+        point = self.viewport().mapFromGlobal(screen_pos.toPoint())
+        area = self.viewport().rect()
+        x = min(max(0, point.x()), max(0, area.width() - panel.width()))
+        y = min(max(0, point.y()), max(0, area.height() - panel.height()))
+        panel.move(x, y)
+        panel.raise_()
+        panel.show()
+
+    def _run_context_action(self, callback):
+        self._context_panel.hide()
+        # Execute after the button-click event is fully handled, avoiding deletion
+        # of graphics nodes during their own input events.
+        QTimer.singleShot(0, callback)
+
     def contextMenuEvent(self, event):
         if self.itemAt(event.pos()) is not None:
             self._context_panel.hide()
             super().contextMenuEvent(event)
             return
-        panel = self._context_panel
-        panel.adjustSize()
-        area = self.viewport().rect()
-        x = min(max(0, event.pos().x()), max(0, area.width() - panel.width()))
-        y = min(max(0, event.pos().y()), max(0, area.height() - panel.height()))
-        panel.move(x, y)
-        panel.raise_()
-        panel.show()
+        self.show_context_actions(event.globalPos(), [
+            ('Add new project', self.addRequested.emit),
+            ('Scan folder...', self.scanRequested.emit),
+        ])
         event.accept()
 
     def mousePressEvent(self, event):
