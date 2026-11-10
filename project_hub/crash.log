@@ -1,0 +1,15 @@
+Windows fatal exception: access violation
+
+Thread 0x00004e94 (most recent call first):
+  File "C:\Users\niels\AppData\Local\Programs\Python\Python312\Lib\threading.py", line 359 in wait
+  File "C:\Users\niels\AppData\Local\Programs\Python\Python312\Lib\threading.py", line 655 in wait
+  File "d:\Users\niels\Desktop\project_hub\project_hub\project_watch.py", line 93 in run
+
+Current thread 0x00005378 (most recent call first):
+  File "d:\Users\niels\Desktop\project_hub\project_hub\project_map.py", line 20 in exec
+  File "d:\Users\niels\Desktop\project_hub\project_hub\project_map.py", line 900 in contextMenuEvent
+  File "d:\Users\niels\Desktop\project_hub\project_hub\project_app.py", line 889 in notify
+  File "d:\Users\niels\Desktop\project_hub\project_hub\project_app.py", line 889 in notify
+  File "d:\Users\niels\Desktop\project_hub\project_hub\project_app.py", line 889 in notify
+  File "d:\Users\niels\Desktop\project_hub\project_hub\project_app.py", line 907 in main
+  File "d:\Users\niels\Desktop\project_hub\project_hub\project_hub.py", line 5 in <module>
